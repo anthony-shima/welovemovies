@@ -1,64 +1,47 @@
-const service = require("./movies.service");
+const moviesService = require("./movies.service");
 const asyncErrorBoundary = require("../errors/asyncErrorBoundary");
 
-async function list(req, res) {
-  const { is_showing } = req.query;
- 
-  if (is_showing) {
-    res.status(200).json({data: await service.listIsShowing()}  )
-  } else {
-    res.status(200).json( {data: await service.list() })
-  }
-}
-
-async function movieIdExist(req, res, next) {
-  const { movieId } = req.params;
-  const movie = await service.read(movieId);
- 
+const movieExists = async (req, res, next) => {
+  const movie = await moviesService.read(req.params.movieId);
   if (movie) {
     res.locals.movie = movie;
-  return next();
+    return next();
   }
-    next({
-    status: 404,
-    message: `Movie cannot be found.`,
-  });
-}
+  next({ status: 404, message: "Movie cannot be found." });
+};
 
-async function read(req, res, next) {
-  const { movie } = res.locals;
-  res.json({ data: movie });
-}
+const read = async (req, res, next) => {
+  const movie = res.locals.movie.movie_id;
+  res.json({ data: await moviesService.read(movie) });
+};
 
-async function getTheaters(req, res){
-  const { movieId } = req.params
-  
-  const result = await service.getTheaters(movieId)
-  
-  res.json({ data:result })
-}
+const readTheatersByMovie = async (req, res, next) => {
+  const movie = res.locals.movie.movie_id;
+  res.json({ data: await moviesService.readTheatersByMovie(movie) });
+};
 
-async function getReviews(req, res) {
-  const { movieId } = req.params
-  const reviews = await service.getMovieReviews(movieId);
-  const allReviews = [];
-  for(let i = 0; i < reviews.length; i++) {
-    const review = reviews[i];
-    const critic = await service.getCritic(review.critic_id);
-    review.critic = critic[0]
-    allReviews.push(review)
-    
+const readReviewsByMovie = async (req, res, next) => {
+  const movie = res.locals.movie.movie_id;
+  res.json({ data: await moviesService.readReviewsByMovie(movie) });
+};
+
+const list = async (req, res, next) => {
+  if (req.query) {
+    req.query.is_showing === "true" &&
+      res.json({ data: await moviesService.listMoviesCurrentlyShowing() });
   }
-
-  res.status(200).json({data: allReviews})
-}
-
-
+  res.json({ data: await moviesService.list() });
+};
 
 module.exports = {
-  list: [asyncErrorBoundary(list)],
-  read: [asyncErrorBoundary(movieIdExist), asyncErrorBoundary(read)],
-  getTheaters: [asyncErrorBoundary(movieIdExist), asyncErrorBoundary(getTheaters)],
-  getReviews: [asyncErrorBoundary(movieIdExist), asyncErrorBoundary(getReviews)]
-  
+  list: asyncErrorBoundary(list),
+  read: [asyncErrorBoundary(movieExists), asyncErrorBoundary(read)],
+  readTheatersByMovie: [
+    asyncErrorBoundary(movieExists),
+    asyncErrorBoundary(readTheatersByMovie),
+  ],
+  readReviewsByMovie: [
+    asyncErrorBoundary(movieExists),
+    asyncErrorBoundary(readReviewsByMovie),
+  ],
 };
