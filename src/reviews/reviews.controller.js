@@ -1,54 +1,31 @@
-const service = require("./reviews.service");
+const reviewsService = require("./reviews.service");
 const asyncErrorBoundary = require("../errors/asyncErrorBoundary");
 
-//middleware
-async function reviewExists(req,res,next){
-    const { reviewId } = req.params
-    const review = await service.read( reviewId)
+const reviewExists = async (req, res, next) => {
+  const review = await reviewsService.read(req.params.reviewId);
+  if (review) {
+    res.locals.review = review;
+    return next();
+  }
+  next({ status: 404, message: "Review cannot be found." });
+};
 
-    if (review) {
-        res.locals.review = review
-        return next();
-    }
-    return next ({ status:404, message: `Review cannot be found`})
+const update = async (req, res, next) => {
+  const review = res.locals.review.review_id;
+  const updatedReview = {
+    ...req.body.data,
+    review_id: res.locals.review.review_id,
+  };
+  await reviewsService.update(updatedReview);
+  res.json({ data: await reviewsService.read(review) });
+};
 
-}
-
-function hasScoreAndBody(req, res, next){
-    const { data: { score = null, content = null } = {} } = req.body
-    let updatedObject = {}
-    if (!score && !content){
-
-        return next({ status:400, message: "missing score and/or content"})
-    }
-    if(score){
-        updatedObject.score = score;
-    }
-    if (content) {
-        updatedObject.content = content
-    }
-    res.locals.update = updatedObject
-    next()
-}
-
-async function destroy(req, res){
-    const { review } = res.locals
-    await service.delete(review.review_id)
-    res.sendStatus(204)
-}
-async function update(req, res){
-    const { review } = res.locals
-    const { update } = res.locals
-    await service.update(update, review.review_id)
-    const updatedReview = await service.read(review.review_id)
-    const critic = await service.getCritic(review.critic_id)
-    
-    
-    res.status(200).json({ data: { ... updatedReview, critic: critic[0]} })
-}
+const destroy = async (req, res, next) => {
+  await reviewsService.delete(res.locals.review.review_id);
+  res.sendStatus(204);
+};
 
 module.exports = {
-    delete: [asyncErrorBoundary(reviewExists), asyncErrorBoundary(destroy)],
-    update: [asyncErrorBoundary(reviewExists), hasScoreAndBody, asyncErrorBoundary(update)]
-
-}
+  update: [asyncErrorBoundary(reviewExists), asyncErrorBoundary(update)],
+  delete: [asyncErrorBoundary(reviewExists), asyncErrorBoundary(destroy)],
+};
